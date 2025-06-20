@@ -1,0 +1,37 @@
+{
+    "name": "audio-transcription-app",
+    "version": "1.0.0",
+    "description": "Full-stack audio transcription app with React frontend and Node.js backend using OpenAI Whisper",
+    "main": "server.js",
+    "type": "commonjs",
+    "scripts": {
+      "start": "node server.js",
+      "dev": "nodemon server.js",
+      "setup": "npm install && npm run setup-python",
+      "setup-python": "pip install openai-whisper torch torchaudio",
+      "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [
+      "audio",
+      "transcription", 
+      "whisper",
+      "speech-to-text",
+      "nodejs",
+      "react"
+    ],
+    "author": "Your Name",
+    "license": "MIT",
+    "dependencies": {
+      "express": "^4.18.2",
+      "multer": "^1.4.5-lts.1",
+      "cors": "^2.8.5",
+      "uuid": "^9.0.1"
+    },
+    "devDependencies": {
+      "nodemon": "^3.0.1"
+    },
+    "engines": {
+      "node": ">=16.0.0",
+      "npm": ">=8.0.0"
+    }
+  }
