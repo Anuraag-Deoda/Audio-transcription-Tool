@@ -138,10 +138,10 @@ const AudioTranscriptionApp = () => {
             // Initialize custom view with combined text from all sentences
             const baseViewMode = 'sentences'; // Default to sentences for custom view
             const rawData = transcriptionData[baseViewMode] || [];
-            
+
             // Combine all text into one block for custom editing
             const combinedText = rawData.map(item => item.text || item.word).join(' ');
-            
+
             // Start with empty custom blocks - user will create their own sections
             setCustomBlocks([]);
             setCustomText(combinedText);
@@ -187,52 +187,64 @@ const AudioTranscriptionApp = () => {
 
 
     // Function to calculate timing for custom blocks using word data
-    const calculateCustomBlockTiming = (blockText) => {
+    const calculateCustomBlockTiming = (blockText, searchStartTime = 0) => {
         if (!transcriptionData || !transcriptionData.words) {
-            return { start: 0, end: 1 };
+          return { start: 0, end: 1 };
         }
-
+    
         const words = transcriptionData.words;
-        const blockWords = blockText.toLowerCase().split(/\s+/).filter(w => w.length > 0);
-
-        if (blockWords.length === 0) return { start: 0, end: 1 };
-
+        
+        // Clean the block text more thoroughly - remove leading/trailing punctuation and spaces
+        const cleanedBlockText = blockText.trim().replace(/^[^\w\s]+|[^\w\s]+$/g, '');
+        const blockWords = cleanedBlockText.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+    
+        if (blockWords.length === 0) return { start: searchStartTime, end: searchStartTime + 1 };
+    
         let startTime = null;
         let endTime = null;
         let currentWordIndexInBlock = 0;
-
-        // Iterate through the transcription words to find the sequence of blockWords
+    
         for (let i = 0; i < words.length; i++) {
-            const word = words[i];
-            const cleanedWordText = (word.text || word.word || "").toLowerCase().replace(/[^\w]/g, "");
-            const cleanedBlockWord = blockWords[currentWordIndexInBlock].replace(/[^\w]/g, "");
-
-            if (cleanedWordText === cleanedBlockWord) {
-                if (startTime === null) {
-                    startTime = word.start;
-                }
-                endTime = word.end;
-                currentWordIndexInBlock++;
-
-                // If all words in the block have been matched sequentially
-                if (currentWordIndexInBlock === blockWords.length) {
-                    break; // Found the full sequence
-                }
-            } else {
-                // Reset if the sequence is broken, unless we haven't started matching yet
-                if (startTime !== null) {
-                    startTime = null;
-                    endTime = null;
-                    currentWordIndexInBlock = 0;
-                }
+          const word = words[i];
+          
+          if (word.start < searchStartTime) {
+            continue;
+          }
+          
+          const cleanedWordText = (word.text || word.word || "").toLowerCase().replace(/[^\w]/g, "");
+          const cleanedBlockWord = blockWords[currentWordIndexInBlock].replace(/[^\w]/g, "");
+    
+          if (cleanedWordText === cleanedBlockWord) {
+            if (startTime === null) {
+              startTime = word.start;
             }
+            endTime = word.end;
+            currentWordIndexInBlock++;
+    
+            if (currentWordIndexInBlock === blockWords.length) {
+              break; // Found the full sequence
+            }
+          } else {
+            if (startTime !== null) {
+              startTime = null;
+              endTime = null;
+              currentWordIndexInBlock = 0;
+              
+              if (cleanedWordText === blockWords[0].replace(/[^\w]/g, "")) {
+                startTime = word.start;
+                endTime = word.end;
+                currentWordIndexInBlock = 1;
+              }
+            }
+          }
         }
-
+    
         return {
-            start: startTime !== null ? startTime : 0,
-            end: endTime !== null ? endTime : (startTime !== null ? startTime + 1 : 1),
+          start: startTime !== null ? startTime : searchStartTime,
+          end: endTime !== null ? endTime : (startTime !== null ? startTime + 1 : searchStartTime + 1),
         };
-    };
+      };
+
 
 
     const getCombinedCustomText = () => {
@@ -240,10 +252,6 @@ const AudioTranscriptionApp = () => {
     };
 
     // Update combined text
-    const updateCombinedCustomText = (newText) => {
-        setCustomText(newText);
-    };
-
     const createCustomBlockFromSelection = () => {
         if (!selectedText || selectionStart === selectionEnd) {
             setError('Please select text to create a block');
@@ -478,8 +486,12 @@ const AudioTranscriptionApp = () => {
           return;
         }
     
+        let currentSearchStartTime = 0; // Start from the beginning for the first block
+    
         const publishedBlocks = customBlocks.map((customBlock, index) => {
-          const timing = calculateCustomBlockTiming(customBlock.text);
+          const timing = calculateCustomBlockTiming(customBlock.text, currentSearchStartTime);
+    
+          currentSearchStartTime = timing.end;
     
           return {
             id: `published-${index}`,
@@ -507,10 +519,8 @@ const AudioTranscriptionApp = () => {
           }))
         );
     
-        // Mark as having unsaved changes to prevent reset
         setHasUnsavedChanges(true);
     
-        // Switch back to sentences view to show the published blocks
         setViewMode('sentences');
         setIsCustomMode(false);
     
@@ -1365,14 +1375,14 @@ const AudioTranscriptionApp = () => {
 
         editableBlocks.forEach((block, index) => {
             const id = `par${index + 1}`;
-            const textSrc = `../page-0001.xhtml#SML${index + 1}`;
+            const textSrc = `../${fileName}.xhtml#SML${index}`;
 
             // Round to two decimal places and add 's' suffix
             const clipBegin = previousEndTime.toFixed(2) + "s";
-            const clipEnd = (previousEndTime + (block.end - block.start)).toFixed(2) + "s";
+            const clipEnd = block.end.toFixed(2) + "s";
 
             smilContent += `\t\t<par id="${id}"><text src="${textSrc}"/><audio src="../audio/${fileName}.mp3" clipBegin="${clipBegin}" clipEnd="${clipEnd}" /></par>\n`;
-            previousEndTime += (block.end - block.start);
+            previousEndTime = block.end
         });
 
         smilContent += `\t</body>\n</smil>`;
@@ -1509,6 +1519,24 @@ const AudioTranscriptionApp = () => {
         getTimeFromX, // Add getXFromTime and getTimeFromX as dependencies to re-create listeners if their dependencies change
         getXFromTime,
     ]);
+
+    const handleCustomTextChange = (newText) => {
+        setCustomText(newText);
+
+        // Split text by newlines to create blocks automatically
+        const lines = newText.split('\n').filter(line => line.trim().length > 0);
+
+        // Create custom blocks from each non-empty line
+        const newCustomBlocks = lines.map((line, index) => ({
+            id: `custom-line-${index}-${Date.now()}`,
+            text: line.trim(),
+            originalText: line.trim(),
+            isEdited: false,
+        }));
+
+        setCustomBlocks(newCustomBlocks);
+    };
+
 
     return (
         <>
@@ -1678,27 +1706,15 @@ const AudioTranscriptionApp = () => {
                                                                             <label className="form-label fw-semibold">Combined Text:</label>
                                                                             <textarea
                                                                                 ref={customTextRef}
-                                                                                id="customTextArea"
                                                                                 className="form-control"
-                                                                                rows="10"
+                                                                                rows={10}
                                                                                 value={getCombinedCustomText()}
-                                                                                onChange={(e) => updateCombinedCustomText(e.target.value)}
-                                                                                onSelect={handleTextSelection}
-                                                                                placeholder="Your transcribed text will appear here..."
+                                                                                onChange={(e) => handleCustomTextChange(e.target.value)}
+                                                                                placeholder="Your transcribed text will appear here. Press Enter to create new blocks..."
                                                                             />
                                                                         </div>
 
                                                                         <div className="d-flex gap-2 mb-3">
-                                                                            <button
-                                                                                className="btn btn-warning btn-sm"
-                                                                                onClick={createCustomBlockFromSelection}
-                                                                                disabled={!selectedText}
-                                                                                title="Create block from selected text"
-                                                                            >
-                                                                                <Scissors size={16} className="me-1" />
-                                                                                Create Block
-                                                                            </button>
-
                                                                             <button
                                                                                 className="btn btn-success"
                                                                                 onClick={publishCustomBlocks}
@@ -1706,7 +1722,7 @@ const AudioTranscriptionApp = () => {
                                                                                 title="Publish custom blocks and generate timestamps"
                                                                             >
                                                                                 <Send size={16} className="me-1" />
-                                                                                Publish
+                                                                                Publish ({customBlocks.length} blocks)
                                                                             </button>
                                                                         </div>
 
