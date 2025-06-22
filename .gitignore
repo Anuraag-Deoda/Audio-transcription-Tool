@@ -2,3 +2,9 @@
 /node_modules
 /venv
 frontend/package-lock.json
+transcription_jobs.db
+transcription_jobs.db-shm
+whisper_transcribe.py
+combined.log
+error.log
+package-lock.json

@@ -76,7 +76,10 @@ const AudioTranscriptionApp = () => {
     // Using a ref to hold the *latest* scrollOffset state value, for direct access in event handlers
     const scrollOffsetRef = useRef(0);
 
-    const API_BASE = 'https://staging.brinx.ai/aud-tool/';
+    // const API_BASE = 'https://staging.brinx.ai/aud-tool/';
+
+    const API_BASE = 'http://localhost:3001/api';
+
 
     // Colors for different block types with alternating shades
     const blockColors = {
@@ -189,62 +192,179 @@ const AudioTranscriptionApp = () => {
     // Function to calculate timing for custom blocks using word data
     const calculateCustomBlockTiming = (blockText, searchStartTime = 0) => {
         if (!transcriptionData || !transcriptionData.words) {
-          return { start: 0, end: 1 };
+            return { start: 0, end: 1 };
         }
-    
+
         const words = transcriptionData.words;
-        
+
         // Clean the block text more thoroughly - remove leading/trailing punctuation and spaces
         const cleanedBlockText = blockText.trim().replace(/^[^\w\s]+|[^\w\s]+$/g, '');
         const blockWords = cleanedBlockText.toLowerCase().split(/\s+/).filter(w => w.length > 0);
-    
+
         if (blockWords.length === 0) return { start: searchStartTime, end: searchStartTime + 1 };
-    
+
         let startTime = null;
         let endTime = null;
         let currentWordIndexInBlock = 0;
-    
-        for (let i = 0; i < words.length; i++) {
-          const word = words[i];
-          
-          if (word.start < searchStartTime) {
-            continue;
-          }
-          
-          const cleanedWordText = (word.text || word.word || "").toLowerCase().replace(/[^\w]/g, "");
-          const cleanedBlockWord = blockWords[currentWordIndexInBlock].replace(/[^\w]/g, "");
-    
-          if (cleanedWordText === cleanedBlockWord) {
-            if (startTime === null) {
-              startTime = word.start;
-            }
-            endTime = word.end;
-            currentWordIndexInBlock++;
-    
-            if (currentWordIndexInBlock === blockWords.length) {
-              break; // Found the full sequence
-            }
-          } else {
-            if (startTime !== null) {
-              startTime = null;
-              endTime = null;
-              currentWordIndexInBlock = 0;
-              
-              if (cleanedWordText === blockWords[0].replace(/[^\w]/g, "")) {
-                startTime = word.start;
-                endTime = word.end;
-                currentWordIndexInBlock = 1;
-              }
-            }
-          }
-        }
-    
-        return {
-          start: startTime !== null ? startTime : searchStartTime,
-          end: endTime !== null ? endTime : (startTime !== null ? startTime + 1 : searchStartTime + 1),
-        };
-      };
 
+        for (let i = 0; i < words.length; i++) {
+            const word = words[i];
+
+            if (word.start < searchStartTime) {
+                continue;
+            }
+
+            const cleanedWordText = (word.text || word.word || "").toLowerCase().replace(/[^\w]/g, "");
+            const cleanedBlockWord = blockWords[currentWordIndexInBlock].replace(/[^\w]/g, "");
+
+            if (cleanedWordText === cleanedBlockWord) {
+                if (startTime === null) {
+                    startTime = word.start;
+                }
+                endTime = word.end;
+                currentWordIndexInBlock++;
+
+                if (currentWordIndexInBlock === blockWords.length) {
+                    break; // Found the full sequence
+                }
+            } else {
+                if (startTime !== null) {
+                    startTime = null;
+                    endTime = null;
+                    currentWordIndexInBlock = 0;
+
+                    if (cleanedWordText === blockWords[0].replace(/[^\w]/g, "")) {
+                        startTime = word.start;
+                        endTime = word.end;
+                        currentWordIndexInBlock = 1;
+                    }
+                }
+            }
+        }
+
+        return {
+            start: startTime !== null ? startTime : searchStartTime,
+            end: endTime !== null ? endTime : (startTime !== null ? startTime + 1 : searchStartTime + 1),
+        };
+    };
+
+
+
+
+
+    // Function to handle XHTML file upload
+
+    const handleXhtmlUpload = (event) => {
+        const file = event.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const xhtmlContent = e.target.result;
+            try {
+              const parser = new DOMParser();
+              const doc = parser.parseFromString(xhtmlContent, "application/xml");
+              
+              // Extract text content from the parsed XHTML
+              let extractedText = "";
+              const allElements = doc.querySelectorAll("*");
+              for (let i = 0; i < allElements.length; i++) {
+                const element = allElements[i];
+                if (element.id && element.id.startsWith("SML")) {
+                  extractedText += element.textContent + "\n";
+                }
+              }
+              
+              if (extractedText.trim() === "") {
+                setError("No text found with 'SML' IDs in the XHTML file.");
+                return;
+              }
+      
+              // Perform content mismatch detection FIRST
+              if (transcriptionData && transcriptionData.sentences) {
+                const audioText = transcriptionData.sentences.map(s => s.text).join(" ");
+                const cleanedAudioText = audioText.toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, " ").trim();
+                const cleanedExtractedText = extractedText.toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, " ").trim();
+      
+                // Simple similarity check
+                const isSimilar = cleanedAudioText.includes(cleanedExtractedText) || cleanedExtractedText.includes(cleanedAudioText);
+                const minLength = Math.min(cleanedAudioText.length, cleanedExtractedText.length);
+                const maxLength = Math.max(cleanedAudioText.length, cleanedExtractedText.length);
+      
+                // Consider it a mismatch if texts are very different in length or not similar at all
+                if (!isSimilar || (maxLength > 0 && Math.abs(cleanedAudioText.length - cleanedExtractedText.length) / maxLength > 0.5)) {
+                  setError("Warning: The text in the uploaded XHTML file appears to be significantly different from the audio transcription. Please ensure you have uploaded the correct file.");
+                  return; // EXIT HERE - don't set the text
+                }
+              }
+      
+              // Only update the custom text area if similarity check passes
+              handleCustomTextChange(extractedText.trim());
+              setError(""); // Clear any previous errors
+              
+            } catch (parseError) {
+              console.error("Error parsing XHTML:", parseError);
+              setError("Error parsing XHTML file. Please ensure it's a valid XHTML/HTML file.");
+            }
+          };
+          reader.readAsText(file);
+        }
+      };
+      
+    // const handleXhtmlUpload = (event) => {
+    //     const file = event.target.files[0];
+    //     if (file) {
+    //       const reader = new FileReader();
+    //       reader.onload = (e) => {
+    //         const xhtmlContent = e.target.result;
+    //         try {
+    //           const parser = new DOMParser();
+    //           const doc = parser.parseFromString(xhtmlContent, "application/xml");
+
+    //           // Extract text content from the parsed XHTML
+    //           let extractedText = "";
+    //           const allElements = doc.querySelectorAll("*");
+    //           for (let i = 0; i < allElements.length; i++) {
+    //             const element = allElements[i];
+    //             if (element.id && element.id.startsWith("SML")) {
+    //               extractedText += element.textContent + "\n";
+    //             }
+    //           }
+
+    //           if (extractedText.trim() === "") {
+    //             setError("No text found with 'SML' IDs in the XHTML file.");
+    //             return;
+    //           }
+
+    //           // Perform content mismatch detection FIRST
+    //           if (transcriptionData && transcriptionData.sentences) {
+    //             const audioText = transcriptionData.sentences.map(s => s.text).join(" ");
+    //             const cleanedAudioText = audioText.toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, " ").trim();
+    //             const cleanedExtractedText = extractedText.toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, " ").trim();
+
+    //             // Simple similarity check
+    //             const isSimilar = cleanedAudioText.includes(cleanedExtractedText) || cleanedExtractedText.includes(cleanedAudioText);
+    //             const minLength = Math.min(cleanedAudioText.length, cleanedExtractedText.length);
+    //             const maxLength = Math.max(cleanedAudioText.length, cleanedExtractedText.length);
+
+    //             // Consider it a mismatch if texts are very different in length or not similar at all
+    //             if (!isSimilar || (maxLength > 0 && Math.abs(cleanedAudioText.length - cleanedExtractedText.length) / maxLength > 0.5)) {
+    //               setError("Warning: The text in the uploaded XHTML file appears to be significantly different from the audio transcription. Please ensure you have uploaded the correct file.");
+    //               return; // EXIT HERE - don't set the text
+    //             }
+    //           }
+
+    //           // Only update the custom text area if similarity check passes
+    //           handleCustomTextChange(extractedText.trim());
+    //           setError(""); // Clear any previous errors
+
+    //         } catch (parseError) {
+    //           console.error("Error parsing XHTML:", parseError);
+    //           setError("Error parsing XHTML file. Please ensure it's a valid XHTML/HTML file.");
+    //         }
+    //       };
+    //       reader.readAsText(file);
+    //     }
+    //   };
 
 
     const getCombinedCustomText = () => {
@@ -482,51 +602,51 @@ const AudioTranscriptionApp = () => {
 
     const publishCustomBlocks = () => {
         if (customBlocks.length === 0) {
-          setError('No custom blocks to publish');
-          return;
+            setError('No custom blocks to publish');
+            return;
         }
-    
+
         let currentSearchStartTime = 0; // Start from the beginning for the first block
-    
+
         const publishedBlocks = customBlocks.map((customBlock, index) => {
-          const timing = calculateCustomBlockTiming(customBlock.text, currentSearchStartTime);
-    
-          currentSearchStartTime = timing.end;
-    
-          return {
-            id: `published-${index}`,
-            text: customBlock.text,
-            start: timing.start,
-            end: timing.end,
-            originalIndex: index,
-            confidence: 0.95,
-            isUserAdded: true, // Mark as user-added to distinguish from backend data
-            originalText: customBlock.text,
-          };
+            const timing = calculateCustomBlockTiming(customBlock.text, currentSearchStartTime);
+
+            currentSearchStartTime = timing.end;
+
+            return {
+                id: `published-${index}`,
+                text: customBlock.text,
+                start: timing.start,
+                end: timing.end,
+                originalIndex: index,
+                confidence: 0.95,
+                isUserAdded: true, // Mark as user-added to distinguish from backend data
+                originalText: customBlock.text,
+            };
         });
-    
+
         // Set the published blocks as editable blocks
         setEditableBlocks(publishedBlocks);
-    
+
         // Update original transcription data for text calculations
         setOriginalTranscriptionData(
-          publishedBlocks.map((block, index) => ({
-            id: `original-${index}`,
-            text: block.text,
-            start: block.start,
-            end: block.end,
-            originalText: block.text,
-          }))
+            publishedBlocks.map((block, index) => ({
+                id: `original-${index}`,
+                text: block.text,
+                start: block.start,
+                end: block.end,
+                originalText: block.text,
+            }))
         );
-    
+
         setHasUnsavedChanges(true);
-    
+
         setViewMode('sentences');
         setIsCustomMode(false);
-    
+
         // Clear any errors
         setError('');
-      };
+    };
 
     // Update custom block text
     const updateCustomBlockText = (blockIndex, newText) => {
@@ -1702,6 +1822,21 @@ const AudioTranscriptionApp = () => {
                                                                         <small>Edit the text and create custom break points</small>
                                                                     </div>
                                                                     <div className="card-body">
+                                                                        <div className="mb-3">
+
+                                                                            <label htmlFor="xhtml-upload" className="form-label fw-semibold">Upload XHTML File:</label>
+
+                                                                            <input
+                                                                                type="file"
+                                                                                className="form-control"
+                                                                                id="xhtml-upload"
+                                                                                accept=".xhtml,.html,.htm"
+                                                                                onChange={handleXhtmlUpload}
+                                                                            />
+                                                                            <small className="text-muted">
+                                                                                Upload an XHTML file to populate the text area.
+                                                                            </small>
+                                                                        </div>
                                                                         <div className="mb-3">
                                                                             <label className="form-label fw-semibold">Combined Text:</label>
                                                                             <textarea
