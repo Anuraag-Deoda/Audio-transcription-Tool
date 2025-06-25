@@ -76,9 +76,9 @@ const AudioTranscriptionApp = () => {
     // Using a ref to hold the *latest* scrollOffset state value, for direct access in event handlers
     const scrollOffsetRef = useRef(0);
 
-    // const API_BASE = 'https://staging.brinx.ai/aud-tool/';
+   const API_BASE = 'https://staging.brinx.ai/aud-tool/';
 
-    const API_BASE = 'http://localhost:3001/api';
+//   const API_BASE = 'http://localhost:3001/api';
 
 
     // Colors for different block types with alternating shades
@@ -190,63 +190,170 @@ const AudioTranscriptionApp = () => {
 
 
     // Function to calculate timing for custom blocks using word data
-    const calculateCustomBlockTiming = (blockText, searchStartTime = 0) => {
-        if (!transcriptionData || !transcriptionData.words) {
-            return { start: 0, end: 1 };
+// Comprehensive text cleaning and matching utilities
+const TextUtils = {
+    // Decode HTML entities
+    decodeHtmlEntities: (text) => {
+      const textArea = document.createElement('textarea');
+      textArea.innerHTML = text;
+      return textArea.value;
+    },
+  
+    // Normalize text for comparison (handle various quote types, spaces, etc.)
+    normalizeText: (text) => {
+      return text
+        .replace(/['']/g, "'")  // Normalize smart quotes to regular apostrophe
+        .replace(/[""]/g, '"')  // Normalize smart quotes to regular quotes
+        .replace(/\s+/g, ' ')   // Normalize multiple spaces to single space
+        .replace(/[^\w\s']/g, '') // Remove punctuation except apostrophes
+        .toLowerCase()
+        .trim();
+    },
+  
+    // Extract words from text with proper cleaning
+    extractWords: (text) => {
+      const decoded = TextUtils.decodeHtmlEntities(text);
+      const normalized = TextUtils.normalizeText(decoded);
+      return normalized.split(/\s+/).filter(w => w.length > 0);
+    },
+  
+    // Check if text ends with sentence punctuation
+    endsWithPunctuation: (text) => {
+      const decoded = TextUtils.decodeHtmlEntities(text);
+      return /[.!?]\s*$/.test(decoded.trim());
+    }
+  };
+  
+  const calculateCustomBlockTiming = (blockText, searchStartTime = 0) => {
+    if (!transcriptionData || !transcriptionData.words) {
+      return { start: 0, end: 1 };
+    }
+  
+    const words = transcriptionData.words;
+    const blockWords = TextUtils.extractWords(blockText);
+    
+    if (blockWords.length === 0) return { start: searchStartTime, end: searchStartTime + 1 };
+  
+    let startTime = null;
+    let endTime = null;
+    let currentWordIndexInBlock = 0;
+    let lastMatchedWordIndex = -1;
+    let bestMatch = null; // Track the best partial match found
+  
+    // Debug logging
+    console.log('=== TIMING CALCULATION DEBUG ===');
+    console.log('Original block text:', blockText);
+    console.log('Decoded block text:', TextUtils.decodeHtmlEntities(blockText));
+    console.log('Block words to find:', blockWords);
+    console.log('Search start time:', searchStartTime);
+  
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i];
+      if (word.start < searchStartTime) {
+        continue;
+      }
+  
+      const transcriptionWord = TextUtils.normalizeText(word.text || word.word || "");
+      const blockWord = blockWords[currentWordIndexInBlock];
+  
+      console.log(`Comparing: "${transcriptionWord}" vs "${blockWord}" (index ${currentWordIndexInBlock})`);
+  
+      if (transcriptionWord === blockWord) {
+        if (startTime === null) {
+          startTime = word.start;
+          console.log('✓ Found start word:', word.text, 'at time:', word.start);
         }
-
-        const words = transcriptionData.words;
-
-        // Clean the block text more thoroughly - remove leading/trailing punctuation and spaces
-        const cleanedBlockText = blockText.trim().replace(/^[^\w\s]+|[^\w\s]+$/g, '');
-        const blockWords = cleanedBlockText.toLowerCase().split(/\s+/).filter(w => w.length > 0);
-
-        if (blockWords.length === 0) return { start: searchStartTime, end: searchStartTime + 1 };
-
-        let startTime = null;
-        let endTime = null;
-        let currentWordIndexInBlock = 0;
-
-        for (let i = 0; i < words.length; i++) {
-            const word = words[i];
-
-            if (word.start < searchStartTime) {
-                continue;
-            }
-
-            const cleanedWordText = (word.text || word.word || "").toLowerCase().replace(/[^\w]/g, "");
-            const cleanedBlockWord = blockWords[currentWordIndexInBlock].replace(/[^\w]/g, "");
-
-            if (cleanedWordText === cleanedBlockWord) {
-                if (startTime === null) {
-                    startTime = word.start;
-                }
-                endTime = word.end;
-                currentWordIndexInBlock++;
-
-                if (currentWordIndexInBlock === blockWords.length) {
-                    break; // Found the full sequence
-                }
-            } else {
-                if (startTime !== null) {
-                    startTime = null;
-                    endTime = null;
-                    currentWordIndexInBlock = 0;
-
-                    if (cleanedWordText === blockWords[0].replace(/[^\w]/g, "")) {
-                        startTime = word.start;
-                        endTime = word.end;
-                        currentWordIndexInBlock = 1;
-                    }
-                }
-            }
-        }
-
-        return {
-            start: startTime !== null ? startTime : searchStartTime,
-            end: endTime !== null ? endTime : (startTime !== null ? startTime + 1 : searchStartTime + 1),
+        endTime = word.end;
+        lastMatchedWordIndex = i;
+        currentWordIndexInBlock++;
+  
+        console.log('✓ Matched word:', word.text, 'end time:', word.end, 'progress:', currentWordIndexInBlock, '/', blockWords.length);
+  
+        // Update best match
+        bestMatch = {
+          start: startTime,
+          end: endTime,
+          matchedWords: currentWordIndexInBlock,
+          lastIndex: lastMatchedWordIndex
         };
+  
+        if (currentWordIndexInBlock === blockWords.length) {
+          console.log('✓ Found complete sequence, ending at:', endTime);
+          break; // Found the full sequence
+        }
+      } else if (currentWordIndexInBlock > 0) {
+        // We were in the middle of matching but found a mismatch
+        console.log('✗ Sequence broken at word:', word.text, 'expected:', blockWord);
+        
+        // Reset and try again from this word
+        currentWordIndexInBlock = 0;
+        startTime = null;
+        endTime = null;
+        lastMatchedWordIndex = -1;
+        
+        // Check if this word starts a new match
+        if (transcriptionWord === blockWords[0]) {
+          startTime = word.start;
+          endTime = word.end;
+          lastMatchedWordIndex = i;
+          currentWordIndexInBlock = 1;
+          console.log('→ Started new sequence with:', word.text);
+        }
+      }
+    }
+  
+    // If we didn't find a complete match, use the best partial match
+    if (currentWordIndexInBlock < blockWords.length && bestMatch && bestMatch.matchedWords > 0) {
+      console.log('⚠ Using best partial match:', bestMatch.matchedWords, 'of', blockWords.length, 'words');
+      startTime = bestMatch.start;
+      endTime = bestMatch.end;
+      lastMatchedWordIndex = bestMatch.lastIndex;
+    }
+  
+    // Calculate final end time with pause logic
+    let finalEndTime = endTime;
+    if (endTime !== null && lastMatchedWordIndex !== -1) {
+      const blockEndsWithPunctuation = TextUtils.endsWithPunctuation(blockText);
+      
+      if (blockEndsWithPunctuation) {
+        // Look for the next word after our matched sequence
+        const nextWordIndex = lastMatchedWordIndex + 1;
+        
+        if (nextWordIndex < words.length) {
+          const nextWord = words[nextWordIndex];
+          const timeBetweenWords = nextWord.start - endTime;
+          
+          console.log('Time between last word and next:', timeBetweenWords);
+          
+          // If there's a significant gap (more than 0.3 seconds), add pause time
+          if (timeBetweenWords > 0.3) {
+            const pauseTime = Math.min(0.5, timeBetweenWords * 0.6); // Add max 0.5s pause
+            finalEndTime = endTime + pauseTime;
+            console.log('Added pause time:', pauseTime, 'new end:', finalEndTime);
+          }
+        } else {
+          // If this is the last word in the transcription and ends with punctuation, add 0.3 seconds
+          finalEndTime = endTime + 0.3;
+          console.log('Last word with punctuation, added 0.3s');
+        }
+      }
+    }
+  
+    const result = {
+      start: startTime !== null ? startTime : searchStartTime,
+      end: finalEndTime !== null ? finalEndTime : (startTime !== null ? startTime + 1 : searchStartTime + 1),
     };
+  
+    console.log('=== FINAL RESULT ===');
+    console.log('Start time:', result.start);
+    console.log('End time:', result.end);
+    console.log('Duration:', result.end - result.start);
+    console.log('========================');
+    
+    return result;
+  };
+
+
 
 
 
@@ -286,6 +393,8 @@ const AudioTranscriptionApp = () => {
                 const cleanedExtractedText = extractedText.toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, " ").trim();
       
                 // Simple similarity check
+                console.log("xhtml text =========>", cleanedExtractedText)
+                console.log("audio text =========>", cleanedAudioText)
                 const isSimilar = cleanedAudioText.includes(cleanedExtractedText) || cleanedExtractedText.includes(cleanedAudioText);
                 const minLength = Math.min(cleanedAudioText.length, cleanedExtractedText.length);
                 const maxLength = Math.max(cleanedAudioText.length, cleanedExtractedText.length);
@@ -309,7 +418,7 @@ const AudioTranscriptionApp = () => {
           reader.readAsText(file);
         }
       };
-      
+
     // const handleXhtmlUpload = (event) => {
     //     const file = event.target.files[0];
     //     if (file) {
@@ -1498,8 +1607,8 @@ const AudioTranscriptionApp = () => {
             const textSrc = `../${fileName}.xhtml#SML${index}`;
 
             // Round to two decimal places and add 's' suffix
-            const clipBegin = previousEndTime.toFixed(2) + "s";
-            const clipEnd = block.end.toFixed(2) + "s";
+            const clipBegin = previousEndTime.toFixed(6) + "s";
+            const clipEnd = block.end.toFixed(6) + "s";
 
             smilContent += `\t\t<par id="${id}"><text src="${textSrc}"/><audio src="../audio/${fileName}.mp3" clipBegin="${clipBegin}" clipEnd="${clipEnd}" /></par>\n`;
             previousEndTime = block.end

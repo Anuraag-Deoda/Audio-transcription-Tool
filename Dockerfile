@@ -13,7 +13,7 @@ COPY . .
 # Python venv setup
 RUN python3 -m venv venv && \
     ./venv/bin/pip install --upgrade pip && \
-    ./venv/bin/pip install openai-whisper torch
+    ./venv/bin/pip install psutil openai-whisper torch faster-whisper librosa soundfile 
 
 # Node.js dependencies
 RUN npm install
