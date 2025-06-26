@@ -4,11 +4,11 @@ const multer = require("multer");
 const cors = require("cors");
 const path = require("path");
 const fs = require("fs").promises;
-const { spawn } = require("child_process");
 const { v4: uuidv4 } = require("uuid");
 const crypto = require("crypto");
 const sqlite3 = require("sqlite3").verbose();
 const winston = require("winston");
+const { spawn, exec } = require("child_process"); // Add 'exec' here
 
 const app = express();
 const PORT = process.env.PORT || 3001;
