@@ -10,6 +10,7 @@ import {
     FileAudio,
     Save,
     FileText,
+    FileVideo,
     Trash,
     Trash2,
     FileJson,
@@ -24,10 +25,13 @@ import {
     ChevronDown,
     ChevronRight,
 } from 'lucide-react';
+import AuthorAnimationPopup from './AuthorAnimationPopup';
+import homophoneBank from './json/homophoneBank.json'; // Adjust path if necessary
+
 
 const AudioTranscriptionApp = () => {
-    const [audioFile, setAudioFile] = useState(null);
-    const [audioUrl, setAudioUrl] = useState('');
+    const [mediaFile, setMediaFile] = useState(null); // <--- CHANGED: From mediaFile
+    const [mediaUrl, setMediaUrl] = useState('');     // <--- CHANGED: From mediaUrl
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
@@ -51,10 +55,8 @@ const AudioTranscriptionApp = () => {
     const [enablePanning, setEnablePanning] = useState(false);
     const [expandedBlocks, setExpandedBlocks] = useState(new Set()); // Track which blocks are expanded
     const [publishedBlocks, setPublishedBlocks] = useState(false); // For custom view editing
+    const [showAuthorPopup, setShowAuthorPopup] = useState(false); // NEW STATE
 
-
-
-    // Custom View states
     const [customBlocks, setCustomBlocks] = useState([]); // For custom view editing
     const [isCustomMode, setIsCustomMode] = useState(false); // Track if we're in custom mode
     const [customText, setCustomText] = useState(''); // Combined text for custom editing
@@ -63,24 +65,20 @@ const AudioTranscriptionApp = () => {
     const [selectionEnd, setSelectionEnd] = useState(0);
     const [selectedCustomBlockIndex, setSelectedCustomBlockIndex] = useState(null);
 
-
-    const audioRef = useRef();
+    const mediaRef = useRef();
     const canvasRef = useRef();
     const fileInputRef = useRef();
     const waveformContainerRef = useRef(); // Reference to the container element
     const customTextRef = useRef(); // Reference to custom text area
 
-
-
     const isDraggingWaveform = useRef(false);
     const dragStartX = useRef(null);
-    // Using a ref to hold the *latest* scrollOffset state value, for direct access in event handlers
     const scrollOffsetRef = useRef(0);
 
-   const API_BASE = 'https://staging.brinx.ai/aud-tool/';
-
-//   const API_BASE = 'http://localhost:3001/api';
-
+    //============================================end of vars====================================
+    
+    //const API_BASE = 'https://staging.brinx.ai/aud-tool/';
+    const API_BASE = 'http://localhost:3001/api';
 
     // Colors for different block types with alternating shades
     const blockColors = {
@@ -122,6 +120,7 @@ const AudioTranscriptionApp = () => {
         ],
     };
 
+
     // Helper to get raw data based on view mode for originalTranscriptionData
     const getRawDisplayData = (data) => {
         if (!data) return [];
@@ -145,241 +144,353 @@ const AudioTranscriptionApp = () => {
  * @param {number} searchStartTime - The time in the audio from which to start searching for the text block.
  * @returns {{start: number, end: number}} An object containing the calculated start and end times for the block.
  */
-const calculateCustomBlockTiming = useCallback((blockText, searchStartTime = 0) => {
-    if (!transcriptionData || !transcriptionData.words) {
-        return { start: 0, end: 1 };
-    }
-
-    const words = transcriptionData.words;
-    const blockWords = TextUtils.extractWords(blockText);
-
-    if (blockWords.length === 0) {
-        return { start: searchStartTime, end: searchStartTime + 1 };
-    }
-
-    let startTime = null;
-    let endTime = null;
-    let currentWordIndexInBlock = 0;
-    let lastMatchedWordIndex = -1;
-    let bestMatch = null;
-
-    // Find the sequence of words in the transcription that matches the block's text
-    for (let i = 0; i < words.length; i++) {
-        const word = words[i];
-        if (word.start < searchStartTime) {
-            continue;
-        }
-
-        const transcriptionWord = TextUtils.normalizeText(word.text || word.word || "");
-        const blockWord = blockWords[currentWordIndexInBlock];
-
-        if (transcriptionWord === blockWord) {
-            if (startTime === null) {
-                startTime = word.start;
-            }
-            endTime = word.end;
-            lastMatchedWordIndex = i;
-            currentWordIndexInBlock++;
-
-            bestMatch = {
-                start: startTime,
-                end: endTime,
-                matchedWords: currentWordIndexInBlock,
-                lastIndex: lastMatchedWordIndex
-            };
-
-            if (currentWordIndexInBlock === blockWords.length) {
-                break; // Found the full sequence
-            }
-        } else if (currentWordIndexInBlock > 0) {
-            // Mismatch after a partial match, reset and try again from the current word
-            currentWordIndexInBlock = 0;
-            startTime = null;
-            endTime = null;
-            lastMatchedWordIndex = -1;
-
-            if (transcriptionWord === blockWords[0]) {
-                startTime = word.start;
-                endTime = word.end;
-                lastMatchedWordIndex = i;
-                currentWordIndexInBlock = 1;
-            }
-        }
-    }
-
-    // If a full match wasn't found, use the best partial match available
-    if (currentWordIndexInBlock < blockWords.length && bestMatch && bestMatch.matchedWords > 0) {
-        startTime = bestMatch.start;
-        endTime = bestMatch.end;
-        lastMatchedWordIndex = bestMatch.lastIndex;
-    }
-
-    // Adjust the end time for natural pauses and trailing audio
-    let finalEndTime = endTime;
-    if (endTime !== null && lastMatchedWordIndex !== -1) {
-        const blockEndsWithPunctuation = TextUtils.endsWithPunctuation(blockText);
-
-        // Only apply pause logic if the block text ends with punctuation, indicating a natural endpoint.
-        if (blockEndsWithPunctuation) {
-            const nextWordIndex = lastMatchedWordIndex + 1;
-
-            // Case 1: The matched block is at the very end of the transcription.
-            if (nextWordIndex >= words.length) {
-                // Extend the final word's time by a fixed amount to capture trailing audio.
-                finalEndTime = endTime + 0.3;
-            }
-            // Case 2: There are more words in the audio after the block.
-            else {
-                const nextWord = words[nextWordIndex];
-                const timeBetweenWords = nextWord.start - endTime;
-
-                // If there's a significant gap (e.g., > 0.3s), it indicates a pause.
-                if (timeBetweenWords > 0.3) {
-                    // Add a portion of the pause to the end time to make it sound more natural.
-                    // Capping at 0.5s prevents pulling in too much of the next sound.
-                    const pauseExtension = Math.min(0.5, timeBetweenWords * 0.6);
-                    finalEndTime = endTime + pauseExtension;
-                }
-            }
-        }
-    }
-
-    return {
-        start: startTime !== null ? startTime : searchStartTime,
-        end: finalEndTime !== null ? finalEndTime : (startTime !== null ? startTime + 1 : searchStartTime + 1),
-    };
-}, [transcriptionData]); // Added transcriptionData as a dependency for useCallback
-
-
-
-    const calculateCustomBlockTiming_custom = (blockText, searchStartTime = 0) => {
+    const calculateCustomBlockTiming = useCallback((blockText, searchStartTime = 0) => {
         if (!transcriptionData || !transcriptionData.words) {
-          return { start: 0, end: 1 };
+            return { start: 0, end: 1 };
         }
-      
+
         const words = transcriptionData.words;
         const blockWords = TextUtils.extractWords(blockText);
-        
-        if (blockWords.length === 0) return { start: searchStartTime, end: searchStartTime + 1 };
-      
+
+        if (blockWords.length === 0) {
+            return { start: searchStartTime, end: searchStartTime + 1 };
+        }
+
         let startTime = null;
         let endTime = null;
         let currentWordIndexInBlock = 0;
         let lastMatchedWordIndex = -1;
-        let bestMatch = null; // Track the best partial match found
-      
-        // Debug logging
+        let bestMatch = null;
+
+        // Find the sequence of words in the transcription that matches the block's text
+        for (let i = 0; i < words.length; i++) {
+            const word = words[i];
+            if (word.start < searchStartTime) {
+                continue;
+            }
+
+            const transcriptionWord = TextUtils.normalizeText(word.text || word.word || "");
+            const blockWord = blockWords[currentWordIndexInBlock];
+
+            if (transcriptionWord === blockWord) {
+                if (startTime === null) {
+                    startTime = word.start;
+                }
+                endTime = word.end;
+                lastMatchedWordIndex = i;
+                currentWordIndexInBlock++;
+
+                bestMatch = {
+                    start: startTime,
+                    end: endTime,
+                    matchedWords: currentWordIndexInBlock,
+                    lastIndex: lastMatchedWordIndex
+                };
+
+                if (currentWordIndexInBlock === blockWords.length) {
+                    break; // Found the full sequence
+                }
+            } else if (currentWordIndexInBlock > 0) {
+                // Mismatch after a partial match, reset and try again from the current word
+                currentWordIndexInBlock = 0;
+                startTime = null;
+                endTime = null;
+                lastMatchedWordIndex = -1;
+
+                if (transcriptionWord === blockWords[0]) {
+                    startTime = word.start;
+                    endTime = word.end;
+                    lastMatchedWordIndex = i;
+                    currentWordIndexInBlock = 1;
+                }
+            }
+        }
+
+        // If a full match wasn't found, use the best partial match available
+        if (currentWordIndexInBlock < blockWords.length && bestMatch && bestMatch.matchedWords > 0) {
+            startTime = bestMatch.start;
+            endTime = bestMatch.end;
+            lastMatchedWordIndex = bestMatch.lastIndex;
+        }
+
+        // Adjust the end time for natural pauses and trailing audio
+        let finalEndTime = endTime;
+        if (endTime !== null && lastMatchedWordIndex !== -1) {
+            const blockEndsWithPunctuation = TextUtils.endsWithPunctuation(blockText);
+
+            // Only apply pause logic if the block text ends with punctuation, indicating a natural endpoint.
+            if (blockEndsWithPunctuation) {
+                const nextWordIndex = lastMatchedWordIndex + 1;
+
+                // Case 1: The matched block is at the very end of the transcription.
+                if (nextWordIndex >= words.length) {
+                    // Extend the final word's time by a fixed amount to capture trailing audio.
+                    finalEndTime = endTime + 0.3;
+                }
+                // Case 2: There are more words in the audio after the block.
+                else {
+                    const nextWord = words[nextWordIndex];
+                    const timeBetweenWords = nextWord.start - endTime;
+
+                    // If there's a significant gap (e.g., > 0.3s), it indicates a pause.
+                    if (timeBetweenWords > 0.3) {
+                        // Add a portion of the pause to the end time to make it sound more natural.
+                        // Capping at 0.5s prevents pulling in too much of the next sound.
+                        const pauseExtension = Math.min(0.5, timeBetweenWords * 0.6);
+                        finalEndTime = endTime + pauseExtension;
+                    }
+                }
+            }
+        }
+
+        return {
+            start: startTime !== null ? startTime : searchStartTime,
+            end: finalEndTime !== null ? finalEndTime : (startTime !== null ? startTime + 1 : searchStartTime + 1),
+        };
+    }, [transcriptionData]); // Added transcriptionData as a dependency for useCallback
+
+
+    // Helper function to calculate Levenshtein Distance
+    const levenshteinDistance = (s1, s2) => {
+        s1 = s1.toLowerCase();
+        s2 = s2.toLowerCase();
+
+        const costs = [];
+        for (let i = 0; i <= s1.length; i++) {
+            let lastValue = i;
+            for (let j = 0; j <= s2.length; j++) {
+                if (i === 0) {
+                    costs[j] = j;
+                } else if (j === 0) {
+                    costs[j] = lastValue;
+                } else {
+                    let newValue = costs[j - 1];
+                    if (s1.charAt(i - 1) !== s2.charAt(j - 1)) {
+                        newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+                    }
+                    costs[j - 1] = lastValue;
+                    lastValue = newValue;
+                }
+            }
+            if (i > 0) {
+                costs[s2.length] = lastValue;
+            }
+        }
+        return costs[s2.length];
+    };
+
+    const calculateCustomBlockTiming_custom = (blockText, searchStartTime = 0) => {
+        if (!transcriptionData || !transcriptionData.words) {
+            console.warn("transcriptionData or transcriptionData.words is missing. Returning default timing.");
+            return { start: 0, end: 1 };
+        }
+
+        const words = transcriptionData.words;
+        const blockWords = TextUtils.extractWords(blockText).map(word => TextUtils.normalizeText(word));
+
+        if (blockWords.length === 0) {
+            console.log("Block text resulted in no words. Returning timing based on searchStartTime.");
+            return { start: searchStartTime, end: searchStartTime + 1 };
+        }
+
+        let startTime = null;
+        let endTime = null;
+        let currentWordIndexInBlock = 0;
+        let lastMatchedWordIndex = -1;
+        let bestMatch = null;
+
+
+        const areWordsSimilar = (word1, word2) => {
+            const normalizedWord1 = TextUtils.normalizeText(word1);
+            const normalizedWord2 = TextUtils.normalizeText(word2);
+
+            // 1. Exact match (after normalization)
+            if (normalizedWord1 === normalizedWord2) {
+                return true;
+            }
+
+            // 2. Basic stemming/inflection checks (e.g., "work" vs "worked")
+            if (normalizedWord1.startsWith(normalizedWord2) || normalizedWord2.startsWith(normalizedWord1)) {
+                const diff1 = normalizedWord1.substring(normalizedWord2.length);
+                const diff2 = normalizedWord2.substring(normalizedWord1.length);
+                const commonSuffixes = ['ed', 's', 'ing', 'er', 'est', 'ly'];
+                if (commonSuffixes.includes(diff1) || commonSuffixes.includes(diff2)) {
+                    return true;
+                }
+            }
+
+            const distance = levenshteinDistance(normalizedWord1, normalizedWord2);
+            if (distance <= 1) { // "genes" vs "jeans" has a distance of 1
+                console.log(`  -> Levenshtein match: "${word1}" vs "${word2}" (distance: ${distance})`);
+                return true;
+            }
+
+            if (homophoneBank[normalizedWord1] && homophoneBank[normalizedWord1].includes(normalizedWord2)) {
+                console.log(`  -> Homophone bank match: "${word1}" vs "${word2}"`);
+                return true;
+            }
+            // Also check the reverse, in case the bank only lists one direction (e.g., 'to' -> ['too', 'two'] but not 'too' -> ['to'])
+            if (homophoneBank[normalizedWord2] && homophoneBank[normalizedWord2].includes(normalizedWord1)) {
+                console.log(`  -> Homophone bank match (reverse): "${word1}" vs "${word2}"`);
+                return true;
+            }
+
+            return false;
+        };
+
+
         console.log('=== TIMING CALCULATION DEBUG ===');
         console.log('Original block text:', blockText);
         console.log('Decoded block text:', TextUtils.decodeHtmlEntities(blockText));
-        console.log('Block words to find:', blockWords);
+        console.log('Block words to find (normalized):', blockWords);
         console.log('Search start time:', searchStartTime);
-      
+
         for (let i = 0; i < words.length; i++) {
-          const word = words[i];
-          if (word.start < searchStartTime) {
-            continue;
-          }
-      
-          const transcriptionWord = TextUtils.normalizeText(word.text || word.word || "");
-          const blockWord = blockWords[currentWordIndexInBlock];
-      
-          console.log(`Comparing: "${transcriptionWord}" vs "${blockWord}" (index ${currentWordIndexInBlock})`);
-      
-          if (transcriptionWord === blockWord) {
-            if (startTime === null) {
-              startTime = word.start;
-              console.log('✓ Found start word:', word.text, 'at time:', word.start);
+            const word = words[i];
+            if (word.start < searchStartTime) {
+                continue;
             }
-            endTime = word.end;
-            lastMatchedWordIndex = i;
-            currentWordIndexInBlock++;
-      
-            console.log('✓ Matched word:', word.text, 'end time:', word.end, 'progress:', currentWordIndexInBlock, '/', blockWords.length);
-      
-            // Update best match
-            bestMatch = {
-              start: startTime,
-              end: endTime,
-              matchedWords: currentWordIndexInBlock,
-              lastIndex: lastMatchedWordIndex
-            };
-      
-            if (currentWordIndexInBlock === blockWords.length) {
-              console.log('✓ Found complete sequence, ending at:', endTime);
-              break; // Found the full sequence
+
+            const transcriptionWord = TextUtils.normalizeText(word.text || word.word || "");
+            const blockWord = blockWords[currentWordIndexInBlock];
+
+            console.log(`Comparing: "${transcriptionWord}" (transcription) vs "${blockWord}" (block, index ${currentWordIndexInBlock})`);
+
+            if (areWordsSimilar(transcriptionWord, blockWord)) {
+                if (startTime === null) {
+                    startTime = word.start;
+                    console.log('✓ Found start word:', word.text, 'at time:', word.start);
+                }
+                endTime = word.end;
+                lastMatchedWordIndex = i;
+                currentWordIndexInBlock++;
+
+                console.log('✓ Matched word:', word.text, 'end time:', word.end, 'progress:', currentWordIndexInBlock, '/', blockWords.length);
+
+                bestMatch = {
+                    start: startTime,
+                    end: endTime,
+                    matchedWords: currentWordIndexInBlock,
+                    lastIndex: lastMatchedWordIndex
+                };
+
+                if (currentWordIndexInBlock === blockWords.length) {
+                    console.log('✓ Found complete sequence, ending at:', endTime);
+                    break;
+                }
+            } else if (currentWordIndexInBlock > 0) {
+                console.log('✗ Sequence broken at word:', word.text, 'expected:', blockWord);
+
+                currentWordIndexInBlock = 0;
+                startTime = null;
+                endTime = null;
+                lastMatchedWordIndex = -1;
+
+                if (areWordsSimilar(transcriptionWord, blockWords[0])) {
+                    startTime = word.start;
+                    endTime = word.end;
+                    lastMatchedWordIndex = i;
+                    currentWordIndexInBlock = 1;
+                    console.log('→ Started new sequence with:', word.text);
+                }
             }
-          } else if (currentWordIndexInBlock > 0) {
-            // We were in the middle of matching but found a mismatch
-            console.log('✗ Sequence broken at word:', word.text, 'expected:', blockWord);
-            
-            // Reset and try again from this word
-            currentWordIndexInBlock = 0;
-            startTime = null;
-            endTime = null;
-            lastMatchedWordIndex = -1;
-            
-            // Check if this word starts a new match
-            if (transcriptionWord === blockWords[0]) {
-              startTime = word.start;
-              endTime = word.end;
-              lastMatchedWordIndex = i;
-              currentWordIndexInBlock = 1;
-              console.log('→ Started new sequence with:', word.text);
-            }
-          }
         }
-      
-        // If we didn't find a complete match, use the best partial match
+
         if (currentWordIndexInBlock < blockWords.length && bestMatch && bestMatch.matchedWords > 0) {
-          console.log('⚠ Using best partial match:', bestMatch.matchedWords, 'of', blockWords.length, 'words');
-          startTime = bestMatch.start;
-          endTime = bestMatch.end;
-          lastMatchedWordIndex = bestMatch.lastIndex;
+            console.log('⚠ Using best partial match:', bestMatch.matchedWords, 'of', blockWords.length, 'words');
+            startTime = bestMatch.start;
+            endTime = bestMatch.end;
+            lastMatchedWordIndex = bestMatch.lastIndex;
         }
-      
-        // Calculate final end time with pause logic
+
         let finalEndTime = endTime;
         if (endTime !== null && lastMatchedWordIndex !== -1) {
-          const blockEndsWithPunctuation = TextUtils.endsWithPunctuation(blockText);
-          
-          if (blockEndsWithPunctuation) {
-            // Look for the next word after our matched sequence
-            const nextWordIndex = lastMatchedWordIndex + 1;
-            
-            if (nextWordIndex < words.length) {
-              const nextWord = words[nextWordIndex];
-              const timeBetweenWords = nextWord.start - endTime;
-              
-              console.log('Time between last word and next:', timeBetweenWords);
-              
-              // If there's a significant gap (more than 0.3 seconds), add pause time
-              if (timeBetweenWords > 0.3) {
-                const pauseTime = Math.min(0.5, timeBetweenWords * 0.6); // Add max 0.5s pause
-                finalEndTime = endTime + pauseTime;
-                console.log('Added pause time:', pauseTime, 'new end:', finalEndTime);
-              }
-            } else {
-              // If this is the last word in the transcription and ends with punctuation, add 0.3 seconds
-              finalEndTime = endTime + 0.3;
-              console.log('Last word with punctuation, added 0.3s');
+            const blockEndsWithPunctuation = TextUtils.endsWithPunctuation(blockText);
+
+            if (blockEndsWithPunctuation) {
+                const nextWordIndex = lastMatchedWordIndex + 1;
+
+                if (nextWordIndex < words.length) {
+                    const nextWord = words[nextWordIndex];
+                    const timeBetweenWords = nextWord.start - endTime;
+
+                    console.log('Time between last word and next:', timeBetweenWords);
+
+                    if (timeBetweenWords > 0.3) {
+                        const pauseTime = Math.min(0.5, timeBetweenWords * 0.6);
+                        finalEndTime = endTime + pauseTime;
+                        console.log('Added pause time:', pauseTime, 'new end:', finalEndTime);
+                    }
+                } else {
+                    finalEndTime = endTime + 0.3;
+                    console.log('Last word with punctuation, added 0.3s');
+                }
             }
-          }
         }
-      
+
         const result = {
-          start: startTime !== null ? startTime : searchStartTime,
-          end: finalEndTime !== null ? finalEndTime : (startTime !== null ? startTime + 1 : searchStartTime + 1),
+            start: startTime !== null ? startTime : searchStartTime,
+            end: finalEndTime !== null ? finalEndTime : (startTime !== null ? startTime + 1 : searchStartTime + 1),
         };
-      
+
         console.log('=== FINAL RESULT ===');
         console.log('Start time:', result.start);
         console.log('End time:', result.end);
         console.log('Duration:', result.end - result.start);
         console.log('========================');
-        
+
         return result;
-      };
+    };
+
+    const publishCustomBlocks = () => {
+        if (customBlocks.length === 0) {
+            setError('No custom blocks to publish');
+            return;
+        }
+
+        let currentSearchStartTime = 0; // Start from the beginning for the first block
+
+        const publishedBlocks = customBlocks.map((customBlock, index) => {
+            // Use the corrected calculateCustomBlockTiming_custom function
+            const timing = calculateCustomBlockTiming_custom(customBlock.text, currentSearchStartTime);
+
+            currentSearchStartTime = timing.end;
+
+            return {
+                id: `published-${index}`,
+                text: customBlock.text,
+                start: timing.start,
+                end: timing.end,
+                originalIndex: index,
+                confidence: 0.95,
+                isUserAdded: true, // Mark as user-added to distinguish from backend data
+                originalText: customBlock.text,
+            };
+        });
+
+        // Set the published blocks as editable blocks
+        setEditableBlocks(publishedBlocks);
+
+        // Update original transcription data for text calculations
+        setOriginalTranscriptionData(
+            publishedBlocks.map((block, index) => ({
+                id: `original-${index}`,
+                text: block.text,
+                start: block.start,
+                end: block.end,
+                originalText: block.text,
+            }))
+        );
+
+        setHasUnsavedChanges(true);
+
+        setPublishedBlocks(true);
+        setViewMode('sentences');
+        setIsCustomMode(false);
+
+        // Clear any errors
+        setError('');
+    };
 
     useEffect(() => {
         if (transcriptionData && viewMode === 'custom') {
@@ -397,84 +508,99 @@ const calculateCustomBlockTiming = useCallback((blockText, searchStartTime = 0) 
     }, [transcriptionData, viewMode]);
 
 
-useEffect(() => {
-    if (transcriptionData && viewMode !== 'custom' && !publishedBlocks) {
-        // Set originalTranscriptionData once with the raw, unedited data
-        // This remains the raw data from the backend, before any adjustments
-        setOriginalTranscriptionData(
-            getRawDisplayData(transcriptionData).map((item, index) => ({
-                id: `original-${index}`,
-                text: item.text || item.word,
-                start: item.start,
-                end: item.end,
-                originalText: item.text || item.word,
-            }))
-        );
+    useEffect(() => {
+        if (transcriptionData && viewMode !== 'custom' && !publishedBlocks) {
+            // Set originalTranscriptionData once with the raw, unedited data
+            // This remains the raw data from the backend, before any adjustments
+            setOriginalTranscriptionData(
+                getRawDisplayData(transcriptionData).map((item, index) => ({
+                    id: `original-${index}`,
+                    text: item.text || item.word,
+                    start: item.start,
+                    end: item.end,
+                    originalText: item.text || item.word,
+                }))
+            );
 
-        // Initialize editable blocks by applying the timing adjustment logic
-        const blocks = getRawDisplayData(transcriptionData).map((item, index) => {
-            const blockText = item.text || item.word;
-            // Use the calculateCustomBlockTiming to get the adjusted start and end times
-            // Pass the original item.start as searchStartTime to help locate the words
-            const adjustedTiming = calculateCustomBlockTiming(blockText, item.start);
+            // Initialize editable blocks by applying the timing adjustment logic
+            const blocks = getRawDisplayData(transcriptionData).map((item, index) => {
+                const blockText = item.text || item.word;
+                // Use the calculateCustomBlockTiming to get the adjusted start and end times
+                // Pass the original item.start as searchStartTime to help locate the words
+                const adjustedTiming = calculateCustomBlockTiming(blockText, item.start);
 
-            return {
-                id: `block-${index}`,
-                text: blockText,
-                start: adjustedTiming.start, // Use the adjusted start time
-                end: adjustedTiming.end,     // Use the adjusted end time
-                originalIndex: index,
-                confidence: item.probability || item.confidence || 0.95,
-                isUserAdded: false,
-                originalText: blockText,
-            };
-        });
-        setEditableBlocks(blocks);
-        setHasUnsavedChanges(false);
-        setNextBlockId(blocks.length + 1000);
-        setIsCustomMode(false);
-    } else if (viewMode === 'custom') {
-        setIsCustomMode(true);
-    }
-}, [transcriptionData, viewMode, calculateCustomBlockTiming]); // Added calculateCustomBlockTiming to dependencies
+                return {
+                    id: `block-${index}`,
+                    text: blockText,
+                    start: adjustedTiming.start, // Use the adjusted start time
+                    end: adjustedTiming.end,     // Use the adjusted end time
+                    originalIndex: index,
+                    confidence: item.probability || item.confidence || 0.95,
+                    isUserAdded: false,
+                    originalText: blockText,
+                };
+            });
+            setEditableBlocks(blocks);
+            setHasUnsavedChanges(false);
+            setNextBlockId(blocks.length + 1000);
+            setIsCustomMode(false);
+        } else if (viewMode === 'custom') {
+            setIsCustomMode(true);
+        }
+    }, [transcriptionData, viewMode, calculateCustomBlockTiming]); // Added calculateCustomBlockTiming to dependencies
 
 
 
-    // Function to calculate timing for custom blocks using word data
-// Comprehensive text cleaning and matching utilities
-const TextUtils = {
-    // Decode HTML entities
-    decodeHtmlEntities: (text) => {
-      const textArea = document.createElement('textarea');
-      textArea.innerHTML = text;
-      return textArea.value;
-    },
-  
-    // Normalize text for comparison (handle various quote types, spaces, etc.)
-    normalizeText: (text) => {
-      return text
-        .replace(/['']/g, "'")  // Normalize smart quotes to regular apostrophe
-        .replace(/[""]/g, '"')  // Normalize smart quotes to regular quotes
-        .replace(/\s+/g, ' ')   // Normalize multiple spaces to single space
-        .replace(/[^\w\s']/g, '') // Remove punctuation except apostrophes
-        .toLowerCase()
-        .trim();
-    },
-  
-    // Extract words from text with proper cleaning
-    extractWords: (text) => {
-      const decoded = TextUtils.decodeHtmlEntities(text);
-      const normalized = TextUtils.normalizeText(decoded);
-      return normalized.split(/\s+/).filter(w => w.length > 0);
-    },
-  
-    // Check if text ends with sentence punctuation
-    endsWithPunctuation: (text) => {
-      const decoded = TextUtils.decodeHtmlEntities(text);
-      return /[.!?]\s*$/.test(decoded.trim());
-    }
-  };
-  
+    useEffect(() => {
+        const handleKeyDown = (event) => {
+            if (event.ctrlKey && event.shiftKey && event.key === 'L') {
+                event.preventDefault(); 
+                setShowAuthorPopup(true);
+            }
+            // Ctrl+X to close the popup
+            if (event.ctrlKey && event.key === 'x') {
+                event.preventDefault(); 
+                setShowAuthorPopup(false);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, []); 
+
+
+    const TextUtils = {
+        // Decode HTML entities
+        decodeHtmlEntities: (text) => {
+            const textArea = document.createElement('textarea');
+            textArea.innerHTML = text;
+            return textArea.value;
+        },
+        normalizeText: (text) => {
+            return text
+                .replace(/['']/g, "'")  // Normalize smart quotes to regular apostrophe
+                .replace(/[""]/g, '"')  // Normalize smart quotes to regular quotes
+                .replace(/\s+/g, ' ')   // Normalize multiple spaces to single space
+                .replace(/[^\w\s']/g, '') // Remove punctuation except apostrophes
+                .toLowerCase()
+                .trim();
+        },
+
+        // Extract words from text with proper cleaning
+        extractWords: (text) => {
+            const decoded = TextUtils.decodeHtmlEntities(text);
+            const normalized = TextUtils.normalizeText(decoded);
+            return normalized.split(/\s+/).filter(w => w.length > 0);
+        },
+
+        // Check if text ends with sentence punctuation
+        endsWithPunctuation: (text) => {
+            const decoded = TextUtils.decodeHtmlEntities(text);
+            return /[.!?]\s*$/.test(decoded.trim());
+        }
+    };
+
     // Function to handle XHTML file upload
 
     const handleXhtmlUpload = (event) => {
@@ -486,7 +612,7 @@ const TextUtils = {
                 try {
                     const parser = new DOMParser();
                     const doc = parser.parseFromString(xhtmlContent, "application/xml");
-    
+
                     // Extract text content from the parsed XHTML
                     let extractedText = "";
                     const allElements = doc.querySelectorAll("*");
@@ -496,30 +622,30 @@ const TextUtils = {
                             extractedText += element.textContent + "\n";
                         }
                     }
-    
+
                     if (extractedText.trim() === "") {
                         setError("No text found with 'SML' IDs in the XHTML file.");
                         return;
                     }
-    
+
                     // Perform content mismatch detection FIRST
                     if (transcriptionData && transcriptionData.sentences) {
                         const audioText = transcriptionData.sentences.map(s => s.text).join(" ");
-    
+
                         // Use TextUtils.normalizeText for both audio and extracted text
                         const cleanedAudioText = TextUtils.normalizeText(audioText);
                         const cleanedExtractedText = TextUtils.normalizeText(extractedText);
-    
+
                         // --- NEW SIMILARITY CHECK LOGIC ---
                         const cleanedAudioTextNoSpaces = cleanedAudioText.replace(/\s/g, '');
                         const cleanedExtractedTextNoSpaces = cleanedExtractedText.replace(/\s/g, '');
-    
+
                         // Check if one is a substring of the other (after removing spaces)
                         const isSubsequenceSimilar = cleanedAudioTextNoSpaces.includes(cleanedExtractedTextNoSpaces) || cleanedExtractedTextNoSpaces.includes(cleanedAudioTextNoSpaces);
-    
+
                         const minLengthForRatio = Math.min(cleanedAudioTextNoSpaces.length, cleanedExtractedTextNoSpaces.length);
                         const maxLengthForRatio = Math.max(cleanedAudioTextNoSpaces.length, cleanedExtractedTextNoSpaces.length);
-    
+
                         let characterSimilarity = 0;
                         if (maxLengthForRatio > 0) {
                             // A simple character-level similarity: count matching characters in order
@@ -533,25 +659,25 @@ const TextUtils = {
                             }
                             characterSimilarity = matchCount / maxLengthForRatio; // Ratio of matched characters to the longer string
                         }
-    
+
                         // Define a high threshold for character similarity (e.g., 95%)
                         const SIMILARITY_THRESHOLD = 0.95; // 95% character match
-    
+
                         // Combine checks: either one is a subsequence of the other (after space removal)
                         // OR they are very similar character-wise AND their lengths are close (e.g., less than 10% difference).
                         const lengthDifferenceRatio = maxLengthForRatio > 0 ? Math.abs(cleanedAudioText.length - cleanedExtractedText.length) / maxLengthForRatio : 0;
                         const areTextsEffectivelySimilar = isSubsequenceSimilar || (characterSimilarity >= SIMILARITY_THRESHOLD && lengthDifferenceRatio < 0.1);
-    
+
                         if (!areTextsEffectivelySimilar) {
                             setError("Warning: The text in the uploaded XHTML file appears to be significantly different from the audio transcription. Please ensure you have uploaded the correct file.");
                             return; // EXIT HERE - don't set the text
                         }
                     }
-    
+
                     // Only update the custom text area if similarity check passes
                     handleCustomTextChange(extractedText.trim());
                     setError(""); // Clear any previous errors
-    
+
                 } catch (parseError) {
                     console.error("Error parsing XHTML:", parseError);
                     setError("Error parsing XHTML file. Please ensure it's a valid XHTML/HTML file.");
@@ -560,64 +686,6 @@ const TextUtils = {
             reader.readAsText(file);
         }
     };
-    
-
-    // const handleXhtmlUpload = (event) => {
-    //     const file = event.target.files[0];
-    //     if (file) {
-    //       const reader = new FileReader();
-    //       reader.onload = (e) => {
-    //         const xhtmlContent = e.target.result;
-    //         try {
-    //           const parser = new DOMParser();
-    //           const doc = parser.parseFromString(xhtmlContent, "application/xml");
-
-    //           // Extract text content from the parsed XHTML
-    //           let extractedText = "";
-    //           const allElements = doc.querySelectorAll("*");
-    //           for (let i = 0; i < allElements.length; i++) {
-    //             const element = allElements[i];
-    //             if (element.id && element.id.startsWith("SML")) {
-    //               extractedText += element.textContent + "\n";
-    //             }
-    //           }
-
-    //           if (extractedText.trim() === "") {
-    //             setError("No text found with 'SML' IDs in the XHTML file.");
-    //             return;
-    //           }
-
-    //           // Perform content mismatch detection FIRST
-    //           if (transcriptionData && transcriptionData.sentences) {
-    //             const audioText = transcriptionData.sentences.map(s => s.text).join(" ");
-    //             const cleanedAudioText = audioText.toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, " ").trim();
-    //             const cleanedExtractedText = extractedText.toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, " ").trim();
-
-    //             // Simple similarity check
-    //             const isSimilar = cleanedAudioText.includes(cleanedExtractedText) || cleanedExtractedText.includes(cleanedAudioText);
-    //             const minLength = Math.min(cleanedAudioText.length, cleanedExtractedText.length);
-    //             const maxLength = Math.max(cleanedAudioText.length, cleanedExtractedText.length);
-
-    //             // Consider it a mismatch if texts are very different in length or not similar at all
-    //             if (!isSimilar || (maxLength > 0 && Math.abs(cleanedAudioText.length - cleanedExtractedText.length) / maxLength > 0.5)) {
-    //               setError("Warning: The text in the uploaded XHTML file appears to be significantly different from the audio transcription. Please ensure you have uploaded the correct file.");
-    //               return; // EXIT HERE - don't set the text
-    //             }
-    //           }
-
-    //           // Only update the custom text area if similarity check passes
-    //           handleCustomTextChange(extractedText.trim());
-    //           setError(""); // Clear any previous errors
-
-    //         } catch (parseError) {
-    //           console.error("Error parsing XHTML:", parseError);
-    //           setError("Error parsing XHTML file. Please ensure it's a valid XHTML/HTML file.");
-    //         }
-    //       };
-    //       reader.readAsText(file);
-    //     }
-    //   };
-
 
     const getCombinedCustomText = () => {
         return customText;
@@ -648,10 +716,10 @@ const TextUtils = {
 
 
     // Generate waveform data from audio
-    const generateWaveform = async (audioFile) => {
+    const generateWaveform = async (mediaFile) => {
         try {
             const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const arrayBuffer = await audioFile.arrayBuffer();
+            const arrayBuffer = await mediaFile.arrayBuffer();
             const audioData = await audioContext.decodeAudioData(arrayBuffer);
 
             const rawData = audioData.getChannelData(0);
@@ -678,10 +746,10 @@ const TextUtils = {
 
     // Regenerate waveform when zoom level changes
     useEffect(() => {
-        if (audioFile) {
-            generateWaveform(audioFile).then(setWaveformData);
+        if (mediaFile) {
+            generateWaveform(mediaFile).then(setWaveformData);
         }
-    }, [zoomLevel, audioFile]);
+    }, [zoomLevel, mediaFile]);
 
     // Helper function to draw individual blocks
     const drawBlock = (
@@ -851,57 +919,6 @@ const TextUtils = {
         scrollOffset, // Dependency for re-drawing on scroll
     ]);
 
-
-    const publishCustomBlocks = () => {
-        if (customBlocks.length === 0) {
-            setError('No custom blocks to publish');
-            return;
-        }
-
-        let currentSearchStartTime = 0; // Start from the beginning for the first block
-
-        const publishedBlocks = customBlocks.map((customBlock, index) => {
-            const timing = calculateCustomBlockTiming_custom(customBlock.text, currentSearchStartTime);
-
-            currentSearchStartTime = timing.end;
-
-            return {
-                id: `published-${index}`,
-                text: customBlock.text,
-                start: timing.start,
-                end: timing.end,
-                originalIndex: index,
-                confidence: 0.95,
-                isUserAdded: true, // Mark as user-added to distinguish from backend data
-                originalText: customBlock.text,
-            };
-        });
-
-        // Set the published blocks as editable blocks
-        setEditableBlocks(publishedBlocks);
-
-        // Update original transcription data for text calculations
-        setOriginalTranscriptionData(
-            publishedBlocks.map((block, index) => ({
-                id: `original-${index}`,
-                text: block.text,
-                start: block.start,
-                end: block.end,
-                originalText: block.text,
-            }))
-        );
-
-        setHasUnsavedChanges(true);
-
-        setPublishedBlocks(true);
-        setViewMode('sentences');
-        setIsCustomMode(false);
-
-        // Clear any errors
-        setError('');
-    };
-
-    // Update custom block text
     const updateCustomBlockText = (blockIndex, newText) => {
         const updatedBlocks = [...customBlocks];
         updatedBlocks[blockIndex] = {
@@ -917,31 +934,24 @@ const TextUtils = {
         setCustomBlocks(updatedBlocks);
     };
 
-
-    // Converts time (seconds) to X coordinate on the canvas
     const getXFromTime = useCallback((time) => {
         const canvas = canvasRef.current;
         if (!canvas || !duration) return 0;
-        // Ensure canvas.width is current before calculation
         const currentCanvasWidth = waveformContainerRef.current ? waveformContainerRef.current.clientWidth : canvas.width;
         return (time / duration) * currentCanvasWidth * zoomLevel - scrollOffsetRef.current;
-    }, [duration, zoomLevel]); // Dependencies ensure this function updates if these change
+    }, [duration, zoomLevel]); 
 
-    // Converts X coordinate on the canvas to time (seconds)
     const getTimeFromX = useCallback((x) => {
         const canvas = canvasRef.current;
         if (!canvas || !duration) return 0;
-        // Ensure canvas.width is current before calculation
         const currentCanvasWidth = waveformContainerRef.current ? waveformContainerRef.current.clientWidth : canvas.width;
-        // x is clientX - rect.left, so it's already relative to the visual start of the canvas.
-        // Adding scrollOffsetRef.current translates it to the "absolute" waveform coordinate.
+  
         return ((x + scrollOffsetRef.current) / (currentCanvasWidth * zoomLevel)) * duration;
-    }, [duration, zoomLevel]); // Dependencies ensure this function updates if these change
+    }, [duration, zoomLevel]); 
 
     const getWordsForBlock = (block, blockIndex) => {
-        if (viewMode === 'words') return []; // No sub-words for word view
+        if (viewMode === 'words') return []; 
 
-        // If the block has words property, use it
         if (block.words && Array.isArray(block.words)) {
             return block.words;
         }
@@ -1475,9 +1485,9 @@ const TextUtils = {
             return;
         }
 
-        setAudioFile(file);
+        setMediaFile(file);
         const url = URL.createObjectURL(file);
-        setAudioUrl(url);
+        setMediaUrl(url);
 
         try {
             // Generate waveform
@@ -1494,25 +1504,25 @@ const TextUtils = {
 
     // Audio playback controls
     const togglePlayback = () => {
-        if (!audioRef.current) return;
+        if (!mediaRef.current) return;
 
         if (isPlaying) {
-            audioRef.current.pause();
+            mediaRef.current.pause();
         } else {
-            audioRef.current.play();
+            mediaRef.current.play();
         }
         setIsPlaying(!isPlaying);
     };
 
     const handleTimeUpdate = () => {
-        if (audioRef.current && canvasRef.current) {
-            setCurrentTime(audioRef.current.currentTime);
+        if (mediaRef.current && canvasRef.current) {
+            setCurrentTime(mediaRef.current.currentTime);
 
             const canvas = canvasRef.current;
             const currentCanvasDisplayWidth = waveformContainerRef.current ? waveformContainerRef.current.clientWidth : canvas.width;
 
             // Calculate the pixel position of the current time in the full zoomed waveform
-            const timePixelPosition = (audioRef.current.currentTime / duration) * currentCanvasDisplayWidth * zoomLevel;
+            const timePixelPosition = (mediaRef.current.currentTime / duration) * currentCanvasDisplayWidth * zoomLevel;
 
             // Determine the ideal scroll offset to keep the current time visible,
             // preferably centered or near the center of the canvas.
@@ -1536,14 +1546,14 @@ const TextUtils = {
     };
 
     const handleLoadedMetadata = () => {
-        if (audioRef.current) {
-            setDuration(audioRef.current.duration);
+        if (mediaRef.current) {
+            setDuration(mediaRef.current.duration);
         }
     };
 
     const seekTo = (time) => {
-        if (audioRef.current) {
-            audioRef.current.currentTime = time;
+        if (mediaRef.current) {
+            mediaRef.current.currentTime = time;
             setCurrentTime(time);
         }
     };
@@ -1678,7 +1688,7 @@ const TextUtils = {
 
         // Only export the data for the current view mode
         const exportData = {
-            audioFile: audioFile?.name,
+            mediaFile: mediaFile?.name,
             duration: duration,
             viewMode: viewMode,
             [viewMode]: editableBlocks.map((block) => ({
@@ -1694,7 +1704,7 @@ const TextUtils = {
         const url = URL.createObjectURL(dataBlob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `transcription_${viewMode}_${audioFile?.name || 'audio'}.json`;
+        link.download = `transcription_${viewMode}_${mediaFile?.name || 'audio'}.json`;
         link.click();
         URL.revokeObjectURL(url);
     };
@@ -1711,7 +1721,7 @@ const TextUtils = {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${audioFile.name.split('.')[0]}_${viewMode}_audacity.txt`;
+        a.download = `${mediaFile.name.split('.')[0]}_${viewMode}_audacity.txt`;
         a.click();
         URL.revokeObjectURL(url);
     };
@@ -1730,18 +1740,18 @@ const TextUtils = {
         const url = URL.createObjectURL(dataBlob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `subtitles_${viewMode}_${audioFile?.name || 'audio'}.srt`;
+        link.download = `subtitles_${viewMode}_${mediaFile?.name || 'audio'}.srt`;
         link.click();
         URL.revokeObjectURL(url);
     };
 
     const exportSMIL = () => {
-        if (!transcriptionData || !audioFile) {
+        if (!transcriptionData || !mediaFile) {
             setError("No transcription data or audio file to export SMIL.");
             return;
         }
 
-        const fileName = audioFile.name.split(".")[0];
+        const fileName = mediaFile.name.split(".")[0];
         let smilContent = `<?xml version="1.0" encoding="UTF-8"?>\n<smil xmlns="http://www.w3.org/ns/SMIL" version="3.0">\n\t<body>\n`;
 
         let previousEndTime = 0;
@@ -1789,7 +1799,7 @@ const TextUtils = {
             const clipBegin = block.start.toFixed(6);
             const clipEnd = block.end.toFixed(6);
 
-            smilContent += `\t\t<par id="${parId}"><text src="../page-0001.xhtml#${smlId}"/><audio src="../audio/${audioFile?.name || 'audio.mp3'
+            smilContent += `\t\t<par id="${parId}"><text src="../page-0001.xhtml#${smlId}"/><audio src="../audio/${mediaFile?.name || 'audio.mp3'
                 }" clipBegin="${clipBegin}" clipEnd="${clipEnd}" /></par>\n`;
         });
 
@@ -1800,12 +1810,10 @@ const TextUtils = {
         const url = URL.createObjectURL(dataBlob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `smil_${viewMode}_${audioFile?.name || 'audio'}.smil`;
+        link.download = `smil_${viewMode}_${mediaFile?.name || 'audio'}.smil`;
         link.click();
         URL.revokeObjectURL(url);
     };
-
-
 
 
     const formatSRTTime = (seconds) => {
@@ -1831,33 +1839,18 @@ const TextUtils = {
 
         const setCanvasDimensions = () => {
             if (canvas && container) {
-                // Set canvas's drawing buffer size to match its displayed size
-                // This line is crucial for matching internal drawing to external display size
                 canvas.width = container.clientWidth;
                 canvas.height = 150; // Keep fixed height for now
                 drawWaveform(); // Redraw waveform after resize to adapt to new dimensions
             }
         };
-
-        // Set dimensions initially
         setCanvasDimensions();
-
-        // Add resize listener for responsiveness
-        // const resizeObserver = new ResizeObserver(setCanvasDimensions);
-
         if (container) {
-            // Observe the parent container for changes in size
-            // resizeObserver.observe(container);
-
             window.addEventListener('resize', setCanvasDimensions)
         }
 
-
-
         return () => {
             if (container) {
-                // Clean up the observer when the component unmounts
-                // resizeObserver.unobserve(container);
                 window.removeEventListener('resize', setCanvasDimensions)
             }
         };
@@ -1920,6 +1913,7 @@ const TextUtils = {
                 xintegrity="sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM"
                 crossOrigin="anonymous"
             />
+            {showAuthorPopup && <AuthorAnimationPopup onClose={() => setShowAuthorPopup(false)} />}
 
             <div
                 style={{
@@ -1950,7 +1944,7 @@ const TextUtils = {
                                         className="d-none"
                                     />
 
-                                    {!audioFile ? (
+                                    {!mediaFile ? (
                                         <div
                                             onClick={() => fileInputRef.current?.click()}
                                             className="text-center p-4 border border-2 border-dashed rounded-3"
@@ -1984,7 +1978,7 @@ const TextUtils = {
                                                         <div className="d-flex align-items-center justify-content-between mb-3">
                                                             <div className="d-flex align-items-center">
                                                                 <FileAudio className="text-primary me-2" size={20} />
-                                                                <h6 className="mb-0 fw-semibold">{audioFile.name}</h6>
+                                                                <h6 className="mb-0 fw-semibold">{mediaFile.name}</h6>
                                                             </div>
                                                             <div className="d-flex align-items-center gap-2">
                                                                 <label className="form-label mb-0 fw-semibold">
@@ -2005,8 +1999,8 @@ const TextUtils = {
                                                         </div>
 
                                                         <audio
-                                                            ref={audioRef}
-                                                            src={audioUrl}
+                                                            ref={mediaRef}
+                                                            src={mediaUrl}
                                                             onTimeUpdate={handleTimeUpdate}
                                                             onLoadedMetadata={handleLoadedMetadata}
                                                             onEnded={() => setIsPlaying(false)}

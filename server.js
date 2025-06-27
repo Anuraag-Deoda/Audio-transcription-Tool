@@ -89,7 +89,16 @@ const upload = multer({
       "audio/m4a",
       "audio/mp4",
       "audio/ogg",
-      "audio/webm"
+      "audio/webm",
+
+      // --- NEW: Added video mimetypes ---
+      "video/mp4",
+      "video/webm",
+      "video/quicktime",
+      "video/x-msvideo", // Common for .avi
+      "video/x-flv",     // Common for .flv
+      "video/x-matroska" // Common for .mkv
+      // --- END NEW ---
     ];
     
     if (allowedMimes.includes(file.mimetype)) {
@@ -320,6 +329,41 @@ const ensureUploadsDir = async () => {
   }
 };
 
+// ... (after ensureUploadsDir function)
+
+const extractAudioFromVideo = (videoPath, outputPath) => {
+  return new Promise((resolve, reject) => {
+    // First, check if ffmpeg is installed and available
+    exec('which ffmpeg', (error, stdout, stderr) => {
+      if (error) {
+        logger.error("ffmpeg not found. Please install ffmpeg to enable video processing.");
+        return reject(new Error("ffmpeg not found. Please install ffmpeg and ensure it's in your system's PATH."));
+      }
+
+      // ffmpeg command to extract audio:
+      // -i: input file
+      // -vn: no video
+      // -acodec pcm_s16le: audio codec (uncompressed PCM, 16-bit signed little-endian)
+      // -ar 16000: audio sample rate (16kHz, ideal for Whisper)
+      // -map_metadata -1: remove all metadata from the output
+      const command = `ffmpeg -i "${videoPath}" -vn -acodec pcm_s16le -ar 16000 -map_metadata -1 "${outputPath}"`;
+      logger.info(`Executing ffmpeg command: ${command}`);
+
+      exec(command, (error, stdout, stderr) => {
+        if (error) {
+          logger.error(`ffmpeg error: ${error.message}`);
+          logger.error(`ffmpeg stderr: ${stderr}`); // Log stderr for more details
+          return reject(new Error(`Failed to extract audio from video: ${error.message}`));
+        }
+        logger.info(`Audio extracted to: ${outputPath}`);
+        resolve(outputPath);
+      });
+    });
+  });
+};
+
+
+
 const processTranscriptionData = (whisperResult) => {
   const words = [];
   const sentences = [];
@@ -507,6 +551,18 @@ app.post("/api/transcribe", upload.single("audio"), async (req, res) => {
       return res.status(400).json({ error: "No audio file uploaded" });
     }
     
+     // --- NEW: Check if the uploaded file is a video ---
+     const isVideo = req.file.mimetype.startsWith('video/');
+
+     if (isVideo) {
+       logger.info(`Video file uploaded: ${req.file.originalname}. Extracting audio...`);
+       // Create a unique path for the extracted audio file
+       extractedAudioPath = path.join('uploads', `${uuidv4()}_extracted_audio.wav`);
+       await extractAudioFromVideo(req.file.path, extractedAudioPath);
+       filePathToTranscribe = extractedAudioPath; // Use the extracted audio for transcription
+     }
+     // --- END NEW ---
+
     const fileStats = await fs.stat(req.file.path);
     const fileHash = await generateFileHash(req.file.path);
     

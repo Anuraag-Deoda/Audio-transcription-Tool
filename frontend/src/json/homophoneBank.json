@@ -1,0 +1,655 @@
+{
+    "jeans": [
+        "genes"
+    ],
+    "genes": [
+        "jeans"
+    ],
+    "to": [
+        "too",
+        "two"
+    ],
+    "too": [
+        "to",
+        "two"
+    ],
+    "two": [
+        "to",
+        "too"
+    ],
+    "there": [
+        "their",
+        "theyre"
+    ],
+    "their": [
+        "there",
+        "theyre"
+    ],
+    "theyre": [
+        "there",
+        "their"
+    ],
+    "your": [
+        "youre"
+    ],
+    "youre": [
+        "your"
+    ],
+    "write": [
+        "right",
+        "rite"
+    ],
+    "right": [
+        "write",
+        "rite"
+    ],
+    "rite": [
+        "write",
+        "right"
+    ],
+    "for": [
+        "four"
+    ],
+    "four": [
+        "for"
+    ],
+    "hear": [
+        "here"
+    ],
+    "here": [
+        "hear"
+    ],
+    "know": [
+        "no"
+    ],
+    "no": [
+        "know"
+    ],
+    "new": [
+        "knew"
+    ],
+    "knew": [
+        "new"
+    ],
+    "sea": [
+        "see"
+    ],
+    "see": [
+        "sea"
+    ],
+    "son": [
+        "sun"
+    ],
+    "sun": [
+        "son"
+    ],
+    "which": [
+        "witch"
+    ],
+    "witch": [
+        "which"
+    ],
+    "would": [
+        "wood"
+    ],
+    "wood": [
+        "would"
+    ],
+    "cell": [
+        "sell"
+    ],
+    "sell": [
+        "cell"
+    ],
+    "buy": [
+        "by",
+        "bye"
+    ],
+    "by": [
+        "buy",
+        "bye"
+    ],
+    "bye": [
+        "buy",
+        "by"
+    ],
+    "flour": [
+        "flower"
+    ],
+    "flower": [
+        "flour"
+    ],
+    "hour": [
+        "our"
+    ],
+    "our": [
+        "hour"
+    ],
+    "male": [
+        "mail"
+    ],
+    "mail": [
+        "male"
+    ],
+    "meat": [
+        "meet"
+    ],
+    "meet": [
+        "meat"
+    ],
+    "none": [
+        "nun"
+    ],
+    "nun": [
+        "none"
+    ],
+    "peace": [
+        "piece"
+    ],
+    "piece": [
+        "peace"
+    ],
+    "plain": [
+        "plane"
+    ],
+    "plane": [
+        "plain"
+    ],
+    "read": [
+        "red"
+    ],
+    "red": [
+        "read"
+    ],
+    "road": [
+        "rode"
+    ],
+    "rode": [
+        "road"
+    ],
+    "steal": [
+        "steel"
+    ],
+    "steel": [
+        "steal"
+    ],
+    "tale": [
+        "tail"
+    ],
+    "tail": [
+        "tale"
+    ],
+    "their": [
+        "there",
+        "they're"
+    ],
+    "there": [
+        "their",
+        "they're"
+    ],
+    "they're": [
+        "their",
+        "there"
+    ],
+    "through": [
+        "threw"
+    ],
+    "threw": [
+        "through"
+    ],
+    "waist": [
+        "waste"
+    ],
+    "waste": [
+        "waist"
+    ],
+    "weak": [
+        "week"
+    ],
+    "week": [
+        "weak"
+    ],
+    "weather": [
+        "whether"
+    ],
+    "whether": [
+        "weather"
+    ],
+    "where": [
+        "wear"
+    ],
+    "wear": [
+        "where"
+    ],
+    "whole": [
+        "hole"
+    ],
+    "hole": [
+        "whole"
+    ],
+    "won": [
+        "one"
+    ],
+    "one": [
+        "won"
+    ],
+    "air": [
+        "heir"
+    ],
+    "heir": [
+        "air"
+    ],
+    "aisle": [
+        "isle"
+    ],
+    "isle": [
+        "aisle"
+    ],
+    "altar": [
+        "alter"
+    ],
+    "alter": [
+        "altar"
+    ],
+    "bald": [
+        "bawled"
+    ],
+    "bawled": [
+        "bald"
+    ],
+    "bare": [
+        "bear"
+    ],
+    "bear": [
+        "bare"
+    ],
+    "base": [
+        "bass"
+    ],
+    "bass": [
+        "base"
+    ],
+    "be": [
+        "bee"
+    ],
+    "bee": [
+        "be"
+    ],
+    "berth": [
+        "birth"
+    ],
+    "birth": [
+        "berth"
+    ],
+    "blew": [
+        "blue"
+    ],
+    "blue": [
+        "blew"
+    ],
+    "board": [
+        "bored"
+    ],
+    "bored": [
+        "board"
+    ],
+    "brake": [
+        "break"
+    ],
+    "break": [
+        "brake"
+    ],
+    "capital": [
+        "capitol"
+    ],
+    "capitol": [
+        "capital"
+    ],
+    "ceiling": [
+        "sealing"
+    ],
+    "sealing": [
+        "ceiling"
+    ],
+    "cent": [
+        "scent",
+        "sent"
+    ],
+    "scent": [
+        "cent",
+        "sent"
+    ],
+    "sent": [
+        "cent",
+        "scent"
+    ],
+    "choir": [
+        "quire"
+    ],
+    "quire": [
+        "choir"
+    ],
+    "complement": [
+        "compliment"
+    ],
+    "compliment": [
+        "complement"
+    ],
+    "council": [
+        "counsel"
+    ],
+    "counsel": [
+        "council"
+    ],
+    "creak": [
+        "creek"
+    ],
+    "creek": [
+        "creak"
+    ],
+    "cue": [
+        "queue"
+    ],
+    "queue": [
+        "cue"
+    ],
+    "dew": [
+        "do",
+        "due"
+    ],
+    "do": [
+        "dew",
+        "due"
+    ],
+    "due": [
+        "dew",
+        "do"
+    ],
+    "die": [
+        "dye"
+    ],
+    "dye": [
+        "die"
+    ],
+    "fair": [
+        "fare"
+    ],
+    "fare": [
+        "fair"
+    ],
+    "faze": [
+        "phase"
+    ],
+    "phase": [
+        "faze"
+    ],
+    "feat": [
+        "feet"
+    ],
+    "feet": [
+        "feat"
+    ],
+    "fir": [
+        "fur"
+    ],
+    "fur": [
+        "fir"
+    ],
+    "gnu": [
+        "new"
+    ],
+    "grate": [
+        "great"
+    ],
+    "great": [
+        "grate"
+    ],
+    "guessed": [
+        "guest"
+    ],
+    "guest": [
+        "guessed"
+    ],
+    "hall": [
+        "haul"
+    ],
+    "haul": [
+        "hall"
+    ],
+    "hail": [
+        "hale"
+    ],
+    "hale": [
+        "hail"
+    ],
+    "heal": [
+        "heel",
+        "he'll"
+    ],
+    "heel": [
+        "heal",
+        "he'll"
+    ],
+    "he'll": [
+        "heal",
+        "heel"
+    ],
+    "hi": [
+        "high"
+    ],
+    "high": [
+        "hi"
+    ],
+    "hoarse": [
+        "horse"
+    ],
+    "horse": [
+        "hoarse"
+    ],
+    "idle": [
+        "idol"
+    ],
+    "idol": [
+        "idle"
+    ],
+    "knot": [
+        "not"
+    ],
+    "not": [
+        "knot"
+    ],
+    "lead": [
+        "led"
+    ],
+    "led": [
+        "lead"
+    ],
+    "leak": [
+        "leek"
+    ],
+    "leek": [
+        "leak"
+    ],
+    "loan": [
+        "lone"
+    ],
+    "lone": [
+        "loan"
+    ],
+    "lynx": [
+        "links"
+    ],
+    "links": [
+        "lynx"
+    ],
+    "made": [
+        "maid"
+    ],
+    "maid": [
+        "made"
+    ],
+    "moose": [
+        "mousse"
+    ],
+    "mousse": [
+        "moose"
+    ],
+    "morning": [
+        "mourning"
+    ],
+    "mourning": [
+        "morning"
+    ],
+    "pair": [
+        "pare",
+        "pear"
+    ],
+    "pare": [
+        "pair",
+        "pear"
+    ],
+    "pear": [
+        "pair",
+        "pare"
+    ],
+    "passed": [
+        "past"
+    ],
+    "past": [
+        "passed"
+    ],
+    "pause": [
+        "paws"
+    ],
+    "paws": [
+        "pause"
+    ],
+    "pray": [
+        "prey"
+    ],
+    "prey": [
+        "pray"
+    ],
+    "principal": [
+        "principle"
+    ],
+    "principle": [
+        "principal"
+    ],
+    "rap": [
+        "wrap"
+    ],
+    "wrap": [
+        "rap"
+    ],
+    "reign": [
+        "rain",
+        "rein"
+    ],
+    "rain": [
+        "reign",
+        "rein"
+    ],
+    "rein": [
+        "reign",
+        "rain"
+    ],
+    "ring": [
+        "wring"
+    ],
+    "wring": [
+        "ring"
+    ],
+    "scene": [
+        "seen"
+    ],
+    "seen": [
+        "scene"
+    ],
+    "seam": [
+        "seem"
+    ],
+    "seem": [
+        "seam"
+    ],
+    "slay": [
+        "sleigh"
+    ],
+    "sleigh": [
+        "slay"
+    ],
+    "soar": [
+        "sore"
+    ],
+    "sore": [
+        "soar"
+    ],
+    "stair": [
+        "stare"
+    ],
+    "stare": [
+        "stair"
+    ],
+    "stationary": [
+        "stationery"
+    ],
+    "stationery": [
+        "stationary"
+    ],
+    "suite": [
+        "sweet"
+    ],
+    "sweet": [
+        "suite"
+    ],
+    "their": [
+        "they're",
+        "there"
+    ],
+    "they're": [
+        "their",
+        "there"
+    ],
+    "vain": [
+        "vane",
+        "vein"
+    ],
+    "vane": [
+        "vain",
+        "vein"
+    ],
+    "vein": [
+        "vain",
+        "vane"
+    ],
+    "wait": [
+        "weight"
+    ],
+    "weight": [
+        "wait"
+    ],
+    "ware": [
+        "wear",
+        "where"
+    ],
+    "wear": [
+        "ware",
+        "where"
+    ],
+    "where": [
+        "ware",
+        "wear"
+    ],
+    "yew": [
+        "you",
+        "ewe"
+    ],
+    "you": [
+        "yew",
+        "ewe"
+    ],
+    "ewe": [
+        "yew",
+        "you"
+    ]
+}
