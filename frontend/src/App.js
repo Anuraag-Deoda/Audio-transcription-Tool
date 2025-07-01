@@ -265,7 +265,7 @@ const AudioTranscriptionApp = () => {
                 console.log(`  Last matched word index: ${lastMatchedWordIndex}, Next word index: ${nextWordIndex}, Total words: ${words.length}`);
 
                 if (nextWordIndex >= words.length) {
-                    const pauseExtension = Math.min(0.8, (audioDuration - endTime - 0.1) * 0.9);
+                    const pauseExtension = Math.min(0.75, (audioDuration - endTime - 0.1) * 0.9);
                     const extendedTime = endTime + pauseExtension;
                     finalEndTime = Math.min(extendedTime, audioDuration);
                     console.log(`  Last block, extending from ${endTime.toFixed(3)} by 0.3s to ${extendedTime.toFixed(3)}, capped at audio duration: ${finalEndTime.toFixed(3)}`);
@@ -276,7 +276,7 @@ const AudioTranscriptionApp = () => {
                     console.log(`  Time between current block end (${endTime.toFixed(3)}) and next word start (${nextWord.start.toFixed(3)}): ${timeBetweenWords.toFixed(3)}`);
 
                     if (timeBetweenWords > 0.1) {
-                        const pauseExtension = Math.min(0.8, timeBetweenWords * 0.9);
+                        const pauseExtension = Math.min(1.1, timeBetweenWords * 0.9);
                         finalEndTime = endTime + pauseExtension;
                         console.log(`  Significant gap found. Added pause time: ${pauseExtension.toFixed(3)}, new end: ${finalEndTime.toFixed(3)}`);
                     } else {
@@ -455,7 +455,7 @@ const AudioTranscriptionApp = () => {
                 console.log(`  Last matched word index: ${lastMatchedWordIndex}, Next word index: ${nextWordIndex}, Total words: ${words.length}`);
 
                 if (nextWordIndex >= words.length) {
-                    const pauseExtension = Math.min(0.8, (audioDuration - endTime - 0.1) * 0.9);
+                    const pauseExtension = Math.min(0.75, (audioDuration - endTime - 0.1) * 0.9);
                     const extendedTime = endTime + pauseExtension;
                     finalEndTime = Math.min(extendedTime, audioDuration);
                     console.log(`  Last block, extending from ${endTime.toFixed(3)} by 0.3s to ${extendedTime.toFixed(3)}, capped at audio duration: ${finalEndTime.toFixed(3)}`);
@@ -466,7 +466,7 @@ const AudioTranscriptionApp = () => {
                     console.log(`  Time between current block end (${endTime.toFixed(3)}) and next word start (${nextWord.start.toFixed(3)}): ${timeBetweenWords.toFixed(3)}`);
 
                     if (timeBetweenWords > 0.1) {
-                        const pauseExtension = Math.min(0.8, timeBetweenWords * 0.9);
+                        const pauseExtension = Math.min(1.1, timeBetweenWords * 0.9);
                         finalEndTime = endTime + pauseExtension;
                         console.log(`  Significant gap found. Added pause time: ${pauseExtension.toFixed(3)}, new end: ${finalEndTime.toFixed(3)}`);
                     } else {
@@ -538,9 +538,6 @@ const AudioTranscriptionApp = () => {
         // Clear any errors
         setError('');
     };
-
-
-
 
     useEffect(() => {
         if (transcriptionData && viewMode === 'custom') {
@@ -912,8 +909,6 @@ const AudioTranscriptionApp = () => {
         // Draw progress line
         const progressX = (currentTime / duration) * width * zoomLevel - scrollOffset;
 
-        // Update the ref *after* all rendering logic has used the current scrollOffset state,
-        // ensuring the ref reflects the latest *rendered* scroll position.
         scrollOffsetRef.current = scrollOffset;
 
         ctx.strokeStyle = '#dc3545';
@@ -1538,12 +1533,9 @@ const AudioTranscriptionApp = () => {
             // Calculate the pixel position of the current time in the full zoomed waveform
             const timePixelPosition = (mediaRef.current.currentTime / duration) * currentCanvasDisplayWidth * zoomLevel;
 
-            // Determine the ideal scroll offset to keep the current time visible,
-            // preferably centered or near the center of the canvas.
             const targetScrollOffset = timePixelPosition - (currentCanvasDisplayWidth / 2); // Attempt to center
             const maxScroll = Math.max(0, (currentCanvasDisplayWidth * zoomLevel) - currentCanvasDisplayWidth);
 
-            // Only update scrollOffset if the progress line goes out of view or close to the edge
             const margin = currentCanvasDisplayWidth * 0.1; // 10% margin from edges
             const canvasLeftEdge = scrollOffset;
             const canvasRightEdge = scrollOffset + currentCanvasDisplayWidth;
@@ -1893,9 +1885,7 @@ const AudioTranscriptionApp = () => {
         originalTranscriptionData,
         zoomLevel,
         enablePanning,
-        // scrollOffset is intentionally NOT here because handleCanvasMouseMove directly updates scrollOffsetRef.current,
-        // and this effect is for setting up listeners which should not re-attach on every scroll.
-        // The functions themselves (getTimeFromX, getXFromTime) capture `scrollOffsetRef.current` directly.
+
         getTimeFromX, // Add getXFromTime and getTimeFromX as dependencies to re-create listeners if their dependencies change
         getXFromTime,
     ]);
@@ -1927,7 +1917,7 @@ const AudioTranscriptionApp = () => {
                 xintegrity="sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM"
                 crossOrigin="anonymous"
             />
-            {showAuthorPopup && <AuthorAnimationPopup onClose={() => setShowAuthorPopup(false)} />}
+            {/* {showAuthorPopup && <AuthorAnimationPopup onClose={() => setShowAuthorPopup(false)} />} */}
 
             <div
                 style={{

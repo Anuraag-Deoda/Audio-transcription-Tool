@@ -196,7 +196,7 @@ class WhisperProcessPool {
       
       logger.info(`Starting transcription for ${fileHash}`);
       
-      const pythonProcess = spawn(venvPythonPath, ["whisper_transcribe.py", audioPath, "base"], {
+      const pythonProcess = spawn(venvPythonPath, ["whisperx_transcribe.py", audioPath, "base"], {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: { ...process.env, PYTHONUNBUFFERED: '1' }
       });
